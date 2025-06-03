@@ -1,7 +1,8 @@
+#%%
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-
+#%%
 
 class SpringSim(object):
     def __init__(self, n_balls=5, box_size=5., loc_std=.5, vel_norm=.5,
