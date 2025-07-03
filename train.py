@@ -1,3 +1,4 @@
+#%%
 from __future__ import division
 from __future__ import print_function
 
@@ -11,7 +12,7 @@ import torch.optim as optim
 from torch.optim import lr_scheduler
 from utils import *
 from modules import *
-
+#%%
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -289,7 +290,7 @@ def train(epoch, best_val_loss):
               'acc_val: {:.10f}'.format(np.mean(acc_val)),
               'time: {:.4f}s'.format(time.time() - t), file=log)
         log.flush()
-    return np.mean(nll_val)
+    return np.mean(nll_val), np.mean(nll_train), np.mean(mse_val), np.mean(mse_train)
 
 
 def test():
@@ -304,6 +305,10 @@ def test():
     decoder.eval()
     encoder.load_state_dict(torch.load(encoder_file))
     decoder.load_state_dict(torch.load(decoder_file))
+    
+    # for plotting
+    mse_vals = []
+    
     for batch_idx, (data, relations) in enumerate(test_loader):
         if args.cuda:
             data, relations = data.cuda(), relations.cuda()
@@ -358,6 +363,10 @@ def test():
 
         tot_mse += mse.data.cpu().numpy()
         counter += 1
+        
+        #collect the mse values for each batch -- my addition
+        mse_vals.append(mse.detach().cpu().numpy())
+        
 
     mean_mse = tot_mse / counter
     mse_str = '['
@@ -365,7 +374,13 @@ def test():
         mse_str += " {:.12f} ,".format(mse_step)
     mse_str += " {:.12f} ".format(mean_mse[-1])
     mse_str += ']'
+    
+    # # save the array
+    # np.save('mse_values' + '.npy', mse_vals)
+    # print("saved the array")
 
+    
+    
     print('--------------------------------')
     print('--------Testing-----------------')
     print('--------------------------------')
@@ -391,18 +406,106 @@ def test():
 t_total = time.time()
 best_val_loss = np.inf
 best_epoch = 0
+
+
+#new: collect the losses
+all_val_nll = []
+all_train_nll = []
+all_val_mse = []
+all_train_mse = []
+
+
 for epoch in range(args.epochs):
-    val_loss = train(epoch, best_val_loss)
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
+    val_nll, train_nll, val_mse, train_mse = train(epoch, best_val_loss)
+    if val_nll < best_val_loss:
+        best_val_loss = val_nll
         best_epoch = epoch
+    all_val_nll.append(val_nll)
+    all_train_nll.append(train_nll)   
+    all_val_mse.append(val_mse)
+    all_train_mse.append(train_mse) 
+
+#save these losses
+np.save('val_nll_losses' + '.npy', all_val_nll)
+np.save('train_nll_losses' + '.npy', all_train_nll)
+np.save('val_mse_losses' + '.npy', all_val_mse)
+np.save('train_mse_losses' + '.npy', all_train_mse)
+
+
 print("Optimization Finished!")
 print("Best Epoch: {:04d}".format(best_epoch))
 if args.save_folder:
     print("Best Epoch: {:04d}".format(best_epoch), file=log)
     log.flush()
 
+# Load the saved loss arrays
+val_nll = np.load('val_nll_losses.npy')
+train_nll = np.load('train_nll_losses.npy')
+val_mse = np.load('val_mse_losses.npy')
+train_mse = np.load('train_mse_losses.npy')
+
+# Create an array of epochs (assuming losses recorded once per epoch)
+epochs = np.arange(1, len(train_nll) + 1)
+
+# Plot all four losses
+plt.figure(figsize=(10, 6))
+plt.plot(epochs, train_nll, label='Train NLL')
+plt.plot(epochs, val_nll, label='Val NLL')
+plt.plot(epochs, train_mse, label='Train MSE')
+plt.plot(epochs, val_mse, label='Val MSE')
+
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.title('Training and Validation Losses Over Epochs')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+
+plt.savefig('loss_curves.png', dpi=300)  # You can also use .pdf, .svg, etc.
+plt.show()
+
+
 test()
 if log is not None:
     print(save_folder)
     log.close()
+
+#%%
+
+val_mse_ = np.load('val_mse_losses.npy')
+train_mse_ = np.load('train_mse_losses.npy')
+
+epochs_ = np.arange(1, len(val_mse_) + 1)
+
+plt.figure(figsize=(10, 6))
+plt.plot(epochs_,val_mse_,label='Val MSE')
+plt.plot(epochs_,train_mse_,label='Train MSE')
+plt.xlabel('Epochs')
+plt.ylabel('MSE Loss')
+plt.title('NRI Training/Validation Loss')
+plt.legend()
+plt.grid(True)
+
+#%%
+mse_loss_ = np.load('mse_losses_model2.npy')
+epochs_ = np.arange(1, len(mse_loss_) + 1)
+
+plt.figure(figsize=(8, 5))
+plt.plot(epochs_, mse_loss_, label='NIIP MSE Loss')
+plt.title('NIIP Training Loss')
+plt.xlabel('Epoch')
+plt.ylabel('MSE Loss')
+plt.legend()
+plt.grid(True)
+
+# %%
+plt.figure(figsize=(8, 5))
+plt.plot(epochs_, mse_loss_, label='NIIP MSE Loss')
+plt.plot(epochs_,train_mse_,label='NRI MSE Loss')
+plt.xlabel('Epochs')
+plt.ylabel('MSE Loss')
+plt.title('NRI & NIIP Training Loss')
+plt.legend()
+plt.grid(True)
+# %%
+    
