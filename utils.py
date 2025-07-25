@@ -331,6 +331,159 @@ def load_motion_data(batch_size=1, suffix=''):
 
     return train_data_loader, valid_data_loader, test_data_loader
 
+# helper function for load_SLEAP
+def batch_ready(data,seq_len=100):
+    formatted = np.reshape(data,(data.shape[1]//seq_len, seq_len, data.shape[2],data.shape[3]))
+    print('batch_ready data shape: ', formatted.shape)
+    return formatted
+
+# Function to load and format SLEAP data
+def load_SLEAP(interactions=True):
+    
+    # load the locations and velocities
+    locations = np.load('thorax_locations.npy')
+    locations = np.reshape(locations, (1,63033,2,2))
+    print("locations.shape at start",locations.shape)
+    
+    velocities = np.load('velocities.npy')
+    velocities = np.reshape(velocities, (1,63033,2,2))
+    print("velocities.shape at start", velocities.shape)
+    
+    # split into train, valid, test
+    locations_train = locations[:,:20000,:,:]
+    locations_valid = locations[:,39000:45000,:,:]
+    locations_test = locations[:,45000:51000,:,:]
+    
+    velocities_train = velocities[:,:20000,:,:]
+    velocities_valid = velocities[:,39000:45000,:,:]
+    velocities_test = velocities[:,45000:51000,:,:]
+    
+    # construct the edge matrices
+    if interactions:
+        edges_present = np.array([[0,1],[1,0]], dtype=float)
+        edges_present = np.reshape(edges_present, (1,2,2))
+        define_edges = edges_present
+       
+    else:
+        edges_absent = np.array([[0,0],[0,0]], dtype=float)
+        edges_absent = np.reshape(edges_present, (1,2,2))
+        define_edges = edges_absent
+    
+    print("edges.shape at start", define_edges.shape)
+    edges_train = define_edges
+    edges_valid = define_edges
+    edges_test = define_edges
+    
+    # reformatting to allow for batch sizes bigger than 1
+    formatted_locs_train = batch_ready(locations_train)
+    formatted_locs_valid = batch_ready(locations_valid)
+    formatted_locs_test = batch_ready(locations_test)
+
+    formatted_vel_train = batch_ready(velocities_train)
+    formatted_vel_valid = batch_ready(velocities_valid)
+    formatted_vel_test = batch_ready(velocities_test)
+    
+    # do the same for the edges: get it in the same shape
+    n_train = formatted_locs_train.shape[0]
+    n_valid = formatted_locs_valid.shape[0]
+    n_test = formatted_locs_test.shape[0]
+
+    formatted_edges_train = np.broadcast_to(edges_train,(n_train,2,2)).copy()
+    formatted_edges_valid = np.broadcast_to(edges_valid,(n_valid,2,2)).copy()
+    formatted_edges_test = np.broadcast_to(edges_test,(n_test,2,2)).copy()
+
+    print("formatted edges_train.shape",formatted_edges_train.shape)
+    print("formatted edges_valid.shape",formatted_edges_valid.shape)
+    print("formatted edges_test.shape",formatted_edges_test.shape)
+    
+    # combined into list for easy output
+    locs_list = [formatted_locs_train,formatted_locs_valid,formatted_locs_test]
+    vel_list = [formatted_vel_train,formatted_vel_valid,formatted_vel_test]
+    edges_list = [formatted_edges_train,formatted_edges_valid,formatted_edges_test]
+    
+    return locs_list, vel_list, edges_list
+
+# preprocess and load SLEAP data into dataloaders
+def preprocess_SLEAP(batch_size = 64):
+    
+    # load formatted SLEAP data
+    locs_list, vel_list, edges_list = load_SLEAP()
+    
+    loc_train, loc_valid, loc_test = locs_list[0], locs_list[1], locs_list[2]
+    vel_train, vel_valid, vel_test = vel_list[0], vel_list[1], vel_list[2]
+    edges_train, edges_valid, edges_test = edges_list[0], edges_list[1], edges_list[2]
+    
+    # [num_samples, num_timesteps, num_dims, num_nodes]
+    num_nodes = loc_train.shape[3]   
+
+    loc_max = loc_train.max()
+    loc_min = loc_train.min()
+    vel_max = vel_train.max()
+    vel_min = vel_train.min()
+
+    # Normalize to [-1, 1]
+    loc_train = (loc_train - loc_min) * 2 / (loc_max - loc_min) - 1
+    vel_train = (vel_train - vel_min) * 2 / (vel_max - vel_min) - 1
+
+    loc_valid = (loc_valid - loc_min) * 2 / (loc_max - loc_min) - 1
+    vel_valid = (vel_valid - vel_min) * 2 / (vel_max - vel_min) - 1
+
+    loc_test = (loc_test - loc_min) * 2 / (loc_max - loc_min) - 1
+    vel_test = (vel_test - vel_min) * 2 / (vel_max - vel_min) - 1
+
+    # Reshape to: [num_sims, num_nodes, num_timesteps, num_dims]
+    loc_train = np.transpose(loc_train, [0, 3, 1, 2])
+    vel_train = np.transpose(vel_train, [0, 3, 1, 2])
+    feat_train = np.concatenate([loc_train, vel_train], axis=3)
+    edges_train = np.reshape(edges_train, [-1, num_nodes ** 2])
+    edges_train = np.array((edges_train + 1) / 2, dtype=np.int64)
+
+    loc_valid = np.transpose(loc_valid, [0, 3, 1, 2])
+    vel_valid = np.transpose(vel_valid, [0, 3, 1, 2])
+    feat_valid = np.concatenate([loc_valid, vel_valid], axis=3)
+    edges_valid = np.reshape(edges_valid, [-1, num_nodes ** 2])
+    edges_valid = np.array((edges_valid + 1) / 2, dtype=np.int64)
+
+    loc_test = np.transpose(loc_test, [0, 3, 1, 2])
+    vel_test = np.transpose(vel_test, [0, 3, 1, 2])
+    feat_test = np.concatenate([loc_test, vel_test], axis=3)
+    edges_test = np.reshape(edges_test, [-1, num_nodes ** 2])
+    edges_test = np.array((edges_test + 1) / 2, dtype=np.int64)
+
+    feat_train = torch.FloatTensor(feat_train)
+    edges_train = torch.LongTensor(edges_train)
+    feat_valid = torch.FloatTensor(feat_valid)
+    edges_valid = torch.LongTensor(edges_valid)
+    feat_test = torch.FloatTensor(feat_test)
+    edges_test = torch.LongTensor(edges_test)
+    
+    print("loc_train.shape after preprocessing: ", loc_train.shape)
+    print("vel_train.shape after preprocessing: ", vel_train.shape)
+    print("edges_train.shape after preprocessing: ", edges_train.shape)
+    
+    # Exclude self edges: np.eye is diagonal matrix of ones, np.ravel..
+    # converts 2D indices to 1D flattened indices  suitable for indexing
+    # the flattened matrices edges_train etc.
+    off_diag_idx = np.ravel_multi_index(
+        np.where(np.ones((num_nodes, num_nodes)) - np.eye(num_nodes)),
+    [num_nodes, num_nodes])
+    edges_train = edges_train[:, off_diag_idx]
+    edges_valid = edges_valid[:, off_diag_idx]
+    edges_test = edges_test[:, off_diag_idx]
+    
+    print("edges_train.shape after 2nd preprocessing: ", edges_train.shape)
+    # then convert them into tensor datasets and
+    # wraps the datasets to allow batching, parallel loading etc.
+
+    train_data = TensorDataset(feat_train, edges_train)
+    valid_data = TensorDataset(feat_valid, edges_valid)
+    test_data = TensorDataset(feat_test, edges_test)
+
+    train_data_loader = DataLoader(train_data, batch_size=batch_size)
+    valid_data_loader = DataLoader(valid_data, batch_size=batch_size)
+    test_data_loader = DataLoader(test_data, batch_size=batch_size)
+    
+    return train_data_loader, valid_data_loader, test_data_loader, loc_max, loc_min, vel_max, vel_min
 
 def to_2d_idx(idx, num_cols):
     idx = np.array(idx, dtype=np.int64)
