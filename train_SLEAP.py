@@ -54,7 +54,7 @@ parser.add_argument('--edge-types', type=int, default=2,
                     help='The number of edge types to infer.')
 parser.add_argument('--dims', type=int, default=4,
                     help='The number of input dimensions (position + velocity).')
-parser.add_argument('--timesteps', type=int, default=100,
+parser.add_argument('--timesteps', type=int, default=50,
                     help='The number of time steps per sample.')
 parser.add_argument('--prediction-steps', type=int, default=10, metavar='N',
                     help='Num steps to predict before re-using teacher forcing.')
@@ -110,7 +110,7 @@ else:
 #     args.batch_size, args.suffix)
 
 train_loader, valid_loader, test_loader, loc_max, loc_min, vel_max, vel_min = preprocess_SLEAP(
-    args.batch_size)
+    args.batch_size, dynamic=True)
 
 # Generate off-diagonal interaction graph
 off_diag = np.ones([args.num_atoms, args.num_atoms]) - np.eye(args.num_atoms)
@@ -476,7 +476,7 @@ if log is not None:
     log.close()
 
 #%%
-
+import numpy as np
 
 val_mse_ = np.load('SLEAP_val_mse_losses.npy')
 train_mse_ = np.load('SLEAP_train_mse_losses.npy')
@@ -499,3 +499,4 @@ plt.show()
 
 
     
+# %%

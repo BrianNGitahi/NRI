@@ -331,11 +331,93 @@ def load_motion_data(batch_size=1, suffix=''):
 
     return train_data_loader, valid_data_loader, test_data_loader
 
+
+
 # helper function for load_SLEAP
-def batch_ready(data,seq_len=100):
+def batch_ready(data,seq_len=50):
     formatted = np.reshape(data,(data.shape[1]//seq_len, seq_len, data.shape[2],data.shape[3]))
     print('batch_ready data shape: ', formatted.shape)
     return formatted
+
+# Helper Function for dynamic load
+def construct_edges(locs, threshold=50, batch_size = 50):
+    
+    # define edges based on presence of interaction in each batch
+    edges_present = np.array([[0,1],[1,0]], dtype=float)
+    edges_absent = np.array([[0,0],[0,0]], dtype=float)
+    edge_matrices = []
+
+    n_present = 0
+    
+    for i in range(0,locs.shape[1],batch_size):
+        # get the euclidean distance between the 2 mouses locations
+        x2 = (locs[0,i:i+batch_size,0,0] - locs[0,i:i+batch_size,0,1])**2
+        y2 = (locs[0,i:i+batch_size,1,0] - locs[0,i:i+batch_size,1,1])**2
+        dist =  np.sqrt(x2 + y2)
+        
+        # check against the threshold if there's at least 1 frame where they're 'close'
+        count = np.sum(dist<threshold).item()
+        
+        if count>=1:
+            define_edges = edges_present
+            n_present +=1  
+        else:
+            define_edges = edges_absent
+        
+        edge_matrices.append(define_edges)
+        
+    edge_matrices = np.stack(edge_matrices)
+    print("shape of edge matrices:", edge_matrices.shape)
+    print("number of batches with interaction:", n_present)
+    
+    return edge_matrices
+
+# function to load SLEAP data and construct edges dynamically
+def dynamic_load():
+    
+    # load the locations and velocities
+    locations = np.load('thorax_locations.npy')
+    locations = np.reshape(locations, (1,63033,2,2))
+    print("locations.shape at start",locations.shape)
+    
+    velocities = np.load('velocities.npy')
+    velocities = np.reshape(velocities, (1,63033,2,2))
+    print("velocities.shape at start", velocities.shape)
+    
+    # split into train, valid, test
+    locations_train = locations[:,:20000,:,:]
+    locations_valid = locations[:,39000:45000,:,:]
+    locations_test = locations[:,45000:51000,:,:]
+    
+    velocities_train = velocities[:,:20000,:,:]
+    velocities_valid = velocities[:,39000:45000,:,:]
+    velocities_test = velocities[:,45000:51000,:,:]
+    
+    # construct the edge matrices
+    formatted_edges_train = construct_edges(locations_train)
+    formatted_edges_valid = construct_edges(locations_valid)
+    formatted_edges_test = construct_edges(locations_test)
+
+    # reformatting to allow for batch sizes bigger than 1
+    formatted_locs_train = batch_ready(locations_train)
+    formatted_locs_valid = batch_ready(locations_valid)
+    formatted_locs_test = batch_ready(locations_test)
+
+    formatted_vel_train = batch_ready(velocities_train)
+    formatted_vel_valid = batch_ready(velocities_valid)
+    formatted_vel_test = batch_ready(velocities_test)
+    
+    print("formatted edges_train.shape",formatted_edges_train.shape)
+    print("formatted edges_valid.shape",formatted_edges_valid.shape)
+    print("formatted edges_test.shape",formatted_edges_test.shape)
+    
+    # combined into list for easy output
+    locs_list = [formatted_locs_train,formatted_locs_valid,formatted_locs_test]
+    vel_list = [formatted_vel_train,formatted_vel_valid,formatted_vel_test]
+    edges_list = [formatted_edges_train,formatted_edges_valid,formatted_edges_test]
+    
+    return locs_list, vel_list, edges_list
+
 
 # Function to load and format SLEAP data
 def load_SLEAP(interactions=True):
@@ -404,10 +486,13 @@ def load_SLEAP(interactions=True):
     return locs_list, vel_list, edges_list
 
 # preprocess and load SLEAP data into dataloaders
-def preprocess_SLEAP(batch_size = 64):
+def preprocess_SLEAP(batch_size = 64, dynamic=False):
     
     # load formatted SLEAP data
-    locs_list, vel_list, edges_list = load_SLEAP()
+    if dynamic:
+        locs_list, vel_list, edges_list = dynamic_load()
+    else:
+        locs_list, vel_list, edges_list = load_SLEAP()
     
     loc_train, loc_valid, loc_test = locs_list[0], locs_list[1], locs_list[2]
     vel_train, vel_valid, vel_test = vel_list[0], vel_list[1], vel_list[2]
