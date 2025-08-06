@@ -320,10 +320,13 @@ def test():
         data, relations = Variable(data, volatile=True), Variable(
             relations, volatile=True)
 
-        assert (data.size(2) - args.timesteps) >= args.timesteps
+        print("data.size(2)",data.size(2))
+        print("data.size",data.size())
+        print("timesteps:", args.timesteps)
+        assert (data.size(2) - args.timesteps//2) >= args.timesteps//2
 
-        data_encoder = data[:, :, :args.timesteps, :].contiguous()
-        data_decoder = data[:, :, -args.timesteps:, :].contiguous()
+        data_encoder = data[:, :, :args.timesteps//2, :].contiguous()
+        data_decoder = data[:, :, -args.timesteps//2:, :].contiguous()
 
         logits = encoder(data_encoder, rel_rec, rel_send)
         edges = gumbel_softmax(logits, tau=args.temp, hard=True)
@@ -468,6 +471,15 @@ plt.tight_layout()
 
 plt.savefig('SLEAP_loss_curves.png', dpi=300)  # You can also use .pdf, .svg, etc.
 plt.show()
+
+
+# avoid the error:
+# Ensure timesteps is valid for test data
+# sample_data, _ = next(iter(test_loader))
+# if (sample_data.size(2) - args.timesteps) < args.timesteps:
+#     args.timesteps = sample_data.size(2) // 2
+#     print(f"Adjusted args.timesteps to {args.timesteps} to fit test data shape.")
+
 
 
 test()

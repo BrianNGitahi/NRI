@@ -486,13 +486,13 @@ def load_SLEAP(interactions=True):
     return locs_list, vel_list, edges_list
 
 # preprocess and load SLEAP data into dataloaders
-def preprocess_SLEAP(batch_size = 64, dynamic=False):
+def preprocess_SLEAP(batch_size = 64, dynamic=True):
     
     # load formatted SLEAP data
     if dynamic:
         locs_list, vel_list, edges_list = dynamic_load()
     else:
-        locs_list, vel_list, edges_list = load_SLEAP()
+        locs_list, vel_list, edges_list = load_SLEAP(interactions=False)
     
     loc_train, loc_valid, loc_test = locs_list[0], locs_list[1], locs_list[2]
     vel_train, vel_valid, vel_test = vel_list[0], vel_list[1], vel_list[2]
