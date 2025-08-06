@@ -7,7 +7,7 @@ Thomas Kipf*, Ethan Fetaya*, Kuan-Chieh Wang, Max Welling, Richard Zemel.
 https://arxiv.org/abs/1802.04687  (*: equal contribution)
 
 
-# Brian's Add-ons:
+## Brian's Add-ons:
 
 The SLEAP data formatting for use with NRI has been documented in the Data Prep and SLEAP Data prep notebooks with some utility functions added to the utils.py file. Initial exploration of the SLEAP data is in the Test_notebook and the modified script that trains NRI on SLEAP is Train_SLEAP.py. Finally, the beginning of the first principles modelling is in the Bare-Bones notebook.
 
